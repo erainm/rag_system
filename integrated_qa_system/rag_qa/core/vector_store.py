@@ -12,6 +12,8 @@
         添加文档方法：将分块后的文档转换为向量并存储到Milvus集合
     3. 混合检索与重排序： 结合稠密和稀疏向量进行检索，并通过重排序优化结果
 """
+import os.path
+import sys
 
 # 导入模型加载器： BGE-M3 嵌入函数，用于生成文档和查询的向量表示
 from milvus_model.hybrid import BGEM3EmbeddingFunction
@@ -19,21 +21,21 @@ from milvus_model.hybrid import BGEM3EmbeddingFunction
 from pymilvus import MilvusClient, DataType, AnnSearchRequest, WeightedRanker
 # 导入 Document 类，用于创建文档对象
 from langchain.docstore.document import Document
-# 导入 CrossEncoder，用于重排序和 NLI 判断，加载rerank模型
+# hugging-face开源的基于transformer架构的开源模型库，专门用于处理段落；导入 CrossEncoder，交叉学习，用于重排序和 NLI 判断，加载rerank模型
 from sentence_transformers import CrossEncoder
 # 导入 hashlib 模块，用于生成唯一 ID 的哈希值
 import hashlib
 from rag_qa.core.document_processor import *
 from base.logger import logger
 from base.config import conf
-# 获取当前文件所在目录的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 获取当前文件所在目录的绝对路径(找到core这一层)
+current_dir = os.path.abspath(os.path.dirname(__file__))
 # print(f'current_dir--》{current_dir}')
-# 获取core文件所在的目录的绝对路径
-rag_qa_path = os.path.dirname(current_dir)
+# 获取core文件所在的目录的绝对路径（找到rag_qa这一层）
+rag_qa_path = os.path.dirname(os.path.dirname(current_dir))
 # print(f'rag_qa_path--》{rag_qa_path}')
-core_path = os.path.join(rag_qa_path, 'core')
-sys.path.insert(0, core_path)
+# 添加系统路径
 sys.path.insert(0, rag_qa_path)
 # 获取根目录文件所在的绝对位置
 project_root = os.path.dirname(rag_qa_path)
@@ -74,7 +76,7 @@ class VectorStore:
         # 初始化 BGE-Reranker 模型，用于重排序检索结果
         reranker_path = os.path.join(rag_qa_path, 'models', 'bge-reranker-large')
         # print(f'reranker_path--》{reranker_path}')
-        # rerank模型加载
+        # rerank模型加载，从milvus查询到context（多个父块）后，再根据context和query的关联做一个重排序
         self.reranker = CrossEncoder(reranker_path, device=self.device)
         # 初始化 BGE-M3 嵌入函数，使用 CPU 设备，不启用 FP16
         beg_m3_path = os.path.join(rag_qa_path, 'models', 'bge-m3')
@@ -82,7 +84,7 @@ class VectorStore:
         # 获取稠密向量的维度 1024
         self.dense_dim = self.embedding_function.dim["dense"]
         # 初始化 Milvus 客户端（先不指定数据库）
-        self.client = MilvusClient(uri=f"http://{self.host}:{self.port}")
+        self.client = MilvusClient(uri=f"http://{self.host}:{self.port}", db_name=self.database)
         # 检查并创建数据库
         self._create_database_if_not_exists()
         # 初始化 Milvus 客户端，连接到指定主机和数据库
@@ -151,6 +153,7 @@ class VectorStore:
                 index_name="sparse_index",
                 index_type="SPARSE_INVERTED_INDEX",
                 metric_type="IP",
+                # drop_ratio_build,在构建索引时，按一定比例丢弃向量中绝对值较小的元素
                 params={"drop_ratio_build": 0.2}
             )
 
@@ -162,8 +165,8 @@ class VectorStore:
         # 如果集合已存在
         else:
             # 记录加载集合的日志
-            logger.info(f"已加载集合 {self.collection_name}")
-        # 将集合加载到内存，确保可立即查询
+            logger.info(f"集合已存在 {self.collection_name}")
+        # 将集合加载到内存，确保可立即查询，相当于构建索引，让milvus的这个表可以进行向量匹配查询
         self.client.load_collection(self.collection_name)
 
     """
@@ -199,7 +202,8 @@ class VectorStore:
             sparse_vector = {}
             # 获取第index行对应的稀疏向量数据[0.4, 0.2, 0, 0, 0.1]
             print(f'row--》{embeddings["sparse"]}')
-            row = embeddings["sparse"][index, :]
+            # row = embeddings["sparse"][index, :]
+            row = embeddings['sparse'][[index], :]
             # row = embeddings["sparse"][i]:新版本milvus-model，支持这种获取稀疏向量的形式
             # indics = row.row
             # print(f'row--》{row}')
@@ -257,7 +261,8 @@ class VectorStore:
         # 初始化查询的稀疏向量字典
         sparse_query_vector = {}
         # 获取查询稀疏向量的第 0 行数据
-        row = query_embeddings["sparse"][0, :]
+        # row = query_embeddings["sparse"][0, :]
+        row = query_embeddings['sparse'][[0],:]
         # 获取稀疏向量的非零值索引
         indices = row.indices
         # 获取稀疏向量的非零值

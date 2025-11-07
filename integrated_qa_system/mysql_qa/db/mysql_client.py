@@ -37,7 +37,7 @@ class MySQLClient(object):
           `id` INT AUTO_INCREMENT PRIMARY KEY,
           `subject_name` varchar(20),
           `question` varchar(1000),
-          `answer` varchar(1000)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+          `answer` text) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """
 
         try:
@@ -48,7 +48,7 @@ class MySQLClient(object):
             self.logger.error(f"MySQL表创建失败：{e}")
             raise
 
-    # 插入数据
+    # 插入数据，读取csv插入mysql
     def insert_data(self, csv_path):
         try:
             data = pd.read_csv(csv_path)
@@ -104,5 +104,6 @@ if __name__ == '__main__':
     mysql_client = MySQLClient()
     # mysql_client.create_table()
     # mysql_client.insert_data('/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/mysql_qa/data/JP学科知识问答.csv')
-    answer = mysql_client.fetch_answer('爬虫爬取下来的数据写入文件有哪些方式')
-    print(answer)
+    # answer = mysql_client.fetch_answer('爬虫爬取下来的数据写入文件有哪些方式')
+    all_questions = mysql_client.fetch_question()
+    print(all_questions)

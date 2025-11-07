@@ -10,6 +10,20 @@ docker compose up -d
 docker ps
 
 docker compose down
+
+# 拉取 Attu 镜像（推荐使用最新稳定版本）
+docker pull zilliz/attu:latest
+
+docker run -d --name attu -p 18080:3000 -e MILVUS_URL=host.docker.internal:19530 --add-host=host.docker.internal:host-gateway zilliz/attu:latest
+  
+# 查看容器日志
+docker logs attu
+
+# 停止容器
+docker stop attu
+
+# 删除容器
+docker rm attu
 ```
 
 # 一、基于MySQL实现简单的RAG系统

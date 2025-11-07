@@ -18,7 +18,6 @@ import os
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders.markdown import UnstructuredMarkdownLoader
 from langchain.text_splitter import MarkdownTextSplitter
-from rag_qa.edu_text_spliter.edu_model_text_spliter import AliTextSplitter
 from rag_qa.edu_text_spliter.edu_chinese_recursive_text_splitter import ChineseRecursiveTextSplitter
 from datetime import datetime
 import sys

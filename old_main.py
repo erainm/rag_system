@@ -30,7 +30,7 @@ class IntegratedQASystem:
         # 初始化 Redis 客户端，用于缓存管理
         self.redis_client = RedisClient()
         # 初始化 BM25 搜索模块，结合 MySQL 和 Redis
-        self.bm25_search = BM25Search(self.redis_client, self.mysql_client)
+        self.bm25_search = BM25Search(self.mysql_client, self.redis_client)
         try:
             # 初始化 OpenAI 客户端，连接 DashScope API
             self.client = OpenAI(api_key=self.config.DASHSCOPE_API_KEY, base_url=self.config.DASHSCOPE_BASE_URL)

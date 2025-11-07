@@ -26,7 +26,9 @@ class RedisClient(object):
             self.redis_client = redis.StrictRedis(host=self.config.REDIS_HOST,
                                                   port=self.config.REDIS_PORT,
                                                   password=self.config.REDIS_PASSWORD,
-                                                  db=self.config.REDIS_DB)
+                                                  db=self.config.REDIS_DB,
+                                                  # 解码返回的内容，自动把返回的结果进行解码（默认utf-8）
+                                                  decode_responses=True)
             self.logger.info("Redis连接成功")
         except RedisError as e:
             self.logger.error(f"Redis连接失败：{e}")

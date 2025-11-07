@@ -48,10 +48,10 @@ class BM25Search(object):
         original_key = "qa_original_questions"
         tokenized_key = "qa_tokenized_questions"
 
-        # 尝试获取原始问题列表
+        # 尝试获取原始问题列表，如果可以获取到，则直接放到内存里
         self.questions = self.redis_client.get_data(original_key)
 
-        # 2.2 如果可以获取到，则直接放到内存里
+        # 2.2 获取分词问题列表，如果可以获取到，则直接放到内存里
         tokenized_questions = self.redis_client.get_data(tokenized_key)
 
         # 2.3 如果redis获取不到，则通过查询mysql的原始问题并进行以下处理： 原始问题列表 -> 分词 -> 分词问题列表
@@ -62,20 +62,18 @@ class BM25Search(object):
 
             if all_questions:
                 logger.warn(f'数据库中查不到问题')
-
+            # 原始问题列表 -> 分词 -> 分词问题列表
             tokenized_questions = [preprocess(question[0]) for question in all_questions]
-
+            # 原始问题列表写入redis
             self.redis_client.set_data(original_key, [question[0] for question in all_questions])
-
+            # 分词问题列表写入redis
             self.redis_client.set_data(tokenized_key, tokenized_questions)
 
         self.tokenized_questions = tokenized_questions
 
-        # TODO bm25必须要接受分词以后得数据 [问题di, [分档的分词]]
+        # TODO bm25必须要接受分词以后得数据 [问题di, [文档的分词]]
         # 2.4 初始化bm25模型，并传入：分词问题列表
-
         self.bm25 = BM25Okapi(tokenized_questions)
-
         logger.info('初始化成功')
 
     def _softmax(self, scores):
@@ -138,7 +136,9 @@ class BM25Search(object):
 
                 if answer:
                     # 缓存答案
-                    self.redis_client.set_answer(query, answer)
+                    if not redis_result:
+                        self.redis_client.set_answer(query, answer)
+                        self.logger.info("缓存答案到Redis")
                     # 记录搜索成功
                     self.logger.info(f"搜索成功，Softmax 相似度: {best_score:.3f}")
                     # 返回答案和 False
@@ -149,6 +149,6 @@ class BM25Search(object):
             return None, True
         except Exception as e:
             # 记录搜索失败
-            self.logger.error(f"搜索失败111: {e}")
+            self.logger.error(f"高频问题搜索失败: {e}")
             # 返回 None 和 True
             return None, True
