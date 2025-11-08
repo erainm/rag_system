@@ -37,7 +37,7 @@ class RAGSystem:
         #   获取 RAG 提示模板
         self.rag_prompt = RAGPrompts.rag_prompt()
         #   初始化查询分类器
-        classifier_path = os.path.join("../", 'models', 'bert_query_classifier')
+        classifier_path = os.path.join('models/bert_query_classifier')
         self.query_classifier = QueryClassifier(model_path=classifier_path)
         #   初始化策略选择器
         self.strategy_selector = StrategySelector()
@@ -206,7 +206,6 @@ if __name__ == '__main__':
     rag_system = RAGSystem(vector_store, llm)
     # answer = rag_system.generate_answer(query="AI学科的课程大纲内容有什么",source_filter="ai")
     # print(answer)
-    rag_system._retrieve_with_subqueries(query="AI和JAVA的区别是什么？", source_filter="ai")
+    # rag_system._retrieve_with_subqueries(query="AI和JAVA的区别是什么？", source_filter="ai")
     result = rag_system._retrieve_with_hyde(query="AI课程的NLP的技术有哪些?",source_filter="ai")
     print(result)
-    print(len(result))

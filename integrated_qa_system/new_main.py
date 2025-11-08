@@ -10,7 +10,8 @@ from mysql_qa.cache.redis_client import RedisClient
 from mysql_qa.retrieval.bm25_search import BM25Search
 # 导入 RAG 系统组件，用于知识库检索和答案生成
 from rag_qa.core.vector_store import VectorStore
-from rag_qa.core.rag_system import RAGSystem
+# from rag_qa.core.rag_system import RAGSystem
+from rag_qa.core.new_rag_system import RAGSystem
 # 导入配置和日志工具，用于系统配置和日志记录
 from base.config import conf
 from base.logger import logger
@@ -47,7 +48,8 @@ class IntegratedQASystem:
         # 初始化向量存储，用于 RAG 系统的知识库管理
         self.vector_store = VectorStore()
         # 初始化 RAG 系统，传入向量存储和 DashScope API 调用函数
-        self.rag_system = RAGSystem(self.vector_store, self.call_dashscope)
+        # self.rag_system = RAGSystem(self.vector_store, self.call_dashscope)
+        self.new_rag_system = RAGSystem(self.vector_store, self.call_dashscope)
         # 初始化对话历史表，用于存储会话记录
         self.init_conversation_table()
 
@@ -88,13 +90,18 @@ class IntegratedQASystem:
                 timeout=30,  # 设置 30 秒超时
                 stream=stream  # 启用流式输出
             )
+            # 初始化收集流式输出的字符串
+            collected_content = ""
             # 遍历流式输出的每个 chunk
             for chunk in completion:
                 # print(f'chunk--》{chunk}')
                 # print("*"*80)
                 if chunk.choices and chunk.choices[0].delta.content:
-            #         # 获取当前 chunk 的内容
+                    # 获取当前 chunk 的内容
                     content = chunk.choices[0].delta.content
+                    # 累积内容
+                    collected_content += content
+                    # 逐 token 返回，供前端实时显示
                     yield content
         except Exception as e:
             # 记录 API 调用失败的错误日志
@@ -118,7 +125,6 @@ class IntegratedQASystem:
             history = [{"question": row[0], "answer": row[1]} for row in self.mysql_client.cursor.fetchall()]
             # 反转结果，按时间正序返回
             return history[::-1]
-
         except pymysql.MySQLError as e:
             # 记录查询失败的错误日志
             self.logger.error(f"获取对话历史失败: {e}")
@@ -226,7 +232,7 @@ class IntegratedQASystem:
             # 初始化收集完整答案的字符串
             collected_answer = ""
             # 从 RAG 系统获取流式输出
-            for token in self.rag_system.generate_answer(query, source_filter=source_filter, history=history):
+            for token in self.new_rag_system.generate_answer(query, source_filter=source_filter, history=history):
                 # 累积答案
                 collected_answer += token
                 # 逐 token 返回，标记为部分答案
@@ -253,17 +259,10 @@ class IntegratedQASystem:
 def main():
     # 定义主函数，提供命令行交互界面
     new_qa_system = IntegratedQASystem()  # 初始化问答系统
+    # 生成唯一会话 ID
+    session_id = str(uuid.uuid4())
     try:
-        # 打印欢迎信息
-        print("\n欢迎使用集成问答系统！")
-        # 打印支持的学科类别
-        print(f"支持的来源: {new_qa_system.conf.VALID_SOURCES}")
-        # 提示用户输入查询或退出
-        print("输入查询进行问答，输入 'exit' 退出。")
         while True:
-            session_id = input("\n请您输入对话ID").strip()
-            while not session_id:
-                session_id = input("\n请您输入对话ID").strip()
             # 获取用户输入的查询
             query = input("\n输入查询: ").strip()
             if query.lower() == "exit":
@@ -274,29 +273,41 @@ def main():
                 # 退出循环
                 break
             # 获取用户输入的学科过滤
-            source_filter = input(f"输入来源过滤 ({'/'.join(new_qa_system.conf.VALID_SOURCES)}) (按 Enter 跳过): ").strip()
+            source_filter = input(
+                f"请输入学科类别 ({'/'.join(new_qa_system.conf.VALID_SOURCES)}) (直接回车默认不过滤): ").strip()
             if source_filter and source_filter not in new_qa_system.conf.VALID_SOURCES:
                 # 如果学科过滤无效，记录警告日志
-                logger.warning(f"无效来源 '{source_filter}'，忽略过滤")
-                # 打印无效信息，忽略过滤
-                print(f"无效来源 '{source_filter}'，继续无过滤。")
+                logger.warning(f"无效的学科类别 '{source_filter}'，将不过滤")
+                # 设置为空，忽略过滤
                 source_filter = None
-            # 执行查询，获取答案
-            answer = new_qa_system.query(query, source_filter,session_id=session_id)
-            # 打印答案
-            #print(f"\n答案: {answer}")
-            for value in answer:
-                if value[1] == "False":
-                    print(value[0], end="")
-                else:
-                    print(value[0])
+            # 打印答案提示
+            print("\n答案: ", end="", flush=True)
+            # 初始化累积答案的字符串
+            answer = ""
+            # 迭代 query 方法的生成器
+            for token, is_complete in new_qa_system.query(query, source_filter=source_filter, session_id=session_id):
+                if token:
+                    # 仅当 token 非空时打印
+                    print(token, end="", flush=True)
+                    # 累积答案
+                    answer += token
+                if is_complete:
+                    # 如果是完整答案或流结束，换行并退出循环
+                    print()
+                    break
+            # 打印对话历史
+            history = new_qa_system.get_session_history(session_id)
+            print("\n最近对话历史:")
+            for idx, entry in enumerate(history, 1):
+                # 按顺序打印历史记录
+                print(f"{idx}. 问: {entry['question']}\n   答: {entry['answer']}")
     except Exception as e:
         # 记录系统错误日志
         logger.error(f"系统错误: {e}")
         # 打印错误信息
         print(f"发生错误: {e}")
     finally:
-        # 无论是否发生错误，关闭 MySQL 连接
+        # 关闭 MySQL 连接
         new_qa_system.mysql_client.close()
 
 

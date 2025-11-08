@@ -31,10 +31,10 @@ from base.config import conf
 
 # 获取当前文件所在目录的绝对路径(找到core这一层)
 current_dir = os.path.abspath(os.path.dirname(__file__))
-# print(f'current_dir--》{current_dir}')
+print(f'current_dir--》{current_dir}')
 # 获取core文件所在的目录的绝对路径（找到rag_qa这一层）
-rag_qa_path = os.path.dirname(os.path.dirname(current_dir))
-# print(f'rag_qa_path--》{rag_qa_path}')
+rag_qa_path = os.path.dirname(current_dir)
+print(f'rag_qa_path--》{rag_qa_path}')
 # 添加系统路径
 sys.path.insert(0, rag_qa_path)
 # 获取根目录文件所在的绝对位置
@@ -75,7 +75,7 @@ class VectorStore:
         self.logger.info(f"使用设置：{self.device}")
         # 初始化 BGE-Reranker 模型，用于重排序检索结果
         reranker_path = os.path.join(rag_qa_path, 'models', 'bge-reranker-large')
-        # print(f'reranker_path--》{reranker_path}')
+        print(f'reranker_path--》{reranker_path}')
         # rerank模型加载，从milvus查询到context（多个父块）后，再根据context和query的关联做一个重排序
         self.reranker = CrossEncoder(reranker_path, device=self.device)
         # 初始化 BGE-M3 嵌入函数，使用 CPU 设备，不启用 FP16
@@ -176,7 +176,7 @@ class VectorStore:
         3. 构造数据，为每篇文档生成唯一ID（MD5哈希），将向量和元数据组成字典
         4. 使用upsert操作插入或更新数据
     """
-    def add_documents(self, documents):
+    def add_documents(self, documents: list[Document]):
         """
         :param documents: 已经处理成子块的数据，Document是一个子块
         """
@@ -224,6 +224,7 @@ class VectorStore:
             data.append({
                 "id": text_hash,
                 "text": doc.page_content,
+                # 稠密向量: [文档id(第几个子块)， 文本向量] (传入文档id) -> 当前这个文档对应的文本向量
                 "dense_vector": embeddings["dense"][index],
                 "sparse_vector": sparse_vector,
                 "parent_id": doc.metadata["parent_id"],
@@ -316,13 +317,19 @@ class VectorStore:
             return parent_docs[:conf.CANDIDATE_M]
             # 如果有父文档，进行重排序
         if parent_docs:
+            # 如果父块只有一个，进行返回,这里的parent_docs就是context
+            if len(parent_docs) < 2:
+                return parent_docs
+            # 如果父块超过一个，需要进行重排序，基于query和context的匹配程度做重排序
             # 创建查询与文档内容的配对列表
             pairs = [[query, doc.page_content] for doc in parent_docs]
             # 使用 BGE-Reranker 计算每个配对的得分
             scores = self.reranker.predict(pairs)
             # print(f'scores--》{scores}')
-            # 根据得分从高到低排序文档
-            ranked_parent_docs = [doc for _, doc in sorted(zip(scores, parent_docs), reverse=True)]
+            # 根据得分从高到低排序文档，使用索引排序而不是直接排序Document对象
+            scored_docs = list(zip(scores, parent_docs))
+            scored_docs.sort(key=lambda x: x[0], reverse=True)  # 按得分排序
+            ranked_parent_docs = [doc for score, doc in scored_docs]
         # 如果没有父文档，返回空列表
         else:
             ranked_parent_docs = []
@@ -363,11 +370,11 @@ class VectorStore:
 
 if __name__ == '__main__':
     vector_store = VectorStore()
-    directory_path = '/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/data/ai_data'
-    print(f"embedding_function.dim--》{vector_store.embedding_function.dim}")
-    documents = process_documents(directory_path)
-    vector_store.add_documents(documents)
-    query = "AI学科的课程内容是什么"
+    # directory_path = '/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/data/ai_data'
+    # print(f"embedding_function.dim--》{vector_store.embedding_function.dim}")
+    # documents = process_documents(directory_path)
+    # vector_store.add_documents(documents)
+    query = "windows电脑怎么安装redis"
     results = vector_store.hybrid_search_with_rerank(query, source_filter='ai')
     print(f'results-->{results}')
     print(f'results-->{len(results)}')

@@ -17,14 +17,14 @@ sys.path.insert(0, rag_qa_path)
 # 获取根目录文件所在的绝对位置
 project_root = os.path.dirname(rag_qa_path)
 sys.path.insert(0, project_root)
-from prompts import RAGPrompts
+from rag_qa.core.prompts import RAGPrompts
 #   导入 time 模块，用于计算时间
 import time
 from base.config import conf
 from base.logger import logger
-from query_classifier import QueryClassifier  # 导入查询分类器
-from strategy_selector import StrategySelector  # 导入策略选择器
-from vector_store import VectorStore  # 导入向量数据库对象
+from rag_qa.core.query_classifier import QueryClassifier  # 导入查询分类器
+from rag_qa.core.strategy_selector import StrategySelector  # 导入策略选择器
+from rag_qa.core.vector_store import VectorStore  # 导入向量数据库对象
 
 
 

@@ -39,6 +39,11 @@ sys.path.insert(0, project_root)
     6. 模型预测：加载训练好的模型，完成意图识别任务
 """
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+rag_qa_path = os.path.abspath(os.path.dirname(os.path.abspath(current_dir)))
+project_root = os.path.abspath(os.path.dirname(os.path.abspath(rag_qa_path)))
+sys.path.insert(0, project_root)
+
 class QueryClassifier(object):
     """
     一、初始化方法：初始化预训练的分词器、预训练模型。如果是上线阶段，主要负责加载训练好的模型
@@ -48,9 +53,9 @@ class QueryClassifier(object):
         4. 定义标签映射
         5. 尝试加载模型
     """
-    def __init__(self, model_path='/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/models/bert_query_classifier'):
+    def __init__(self, model_path='models/bert_query_classifier'):
         print(f"rag_qa_path ---> {rag_qa_path}")
-        self.pre_trained_model_path = '/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/models/bert-base-chinese'
+        self.pre_trained_model_path = f'{rag_qa_path}/models/bert-base-chinese'
         self.model_path = f'{rag_qa_path}/{model_path}'
         self.tokenizer = BertTokenizer.from_pretrained(self.pre_trained_model_path, local_files_only=True)
 
@@ -74,7 +79,7 @@ class QueryClassifier(object):
             logger.info(f"加载模型: {self.model_path}")
         else:
             # 初始化新模型
-            self.model = BertForSequenceClassification.from_pretrained("/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/models/bert-base-chinese", num_labels=2)
+            self.model = BertForSequenceClassification.from_pretrained(self.pre_trained_model_path, num_labels=2)
             # print(f'self.model--》{self.model}')
             # 将模型移到指定设备
             self.model.to(self.device)
@@ -161,7 +166,7 @@ class QueryClassifier(object):
             num_train_epochs=3,  # 训练的轮次
             per_device_train_batch_size=8,  # 训练的批次
             per_device_eval_batch_size=8,  # 验证批次
-            warmup_steps=20,  # 学习率预热的步数
+            warmup_steps=500,  # 学习率预热的步数
             weight_decay=0.01,  # 权重衰减系数
             logging_dir="./bert_logs",  # 日志保存路径:如果想生成这个文件夹，需要安装tensorboard
             logging_steps=10,  # 每隔多少步打印日志
@@ -175,8 +180,10 @@ class QueryClassifier(object):
 
         # print(f'training_args--》{training_args}')
         # 初始化Trainer
-        trainer = Trainer(model=self.model, args=training_args,
-                          train_dataset=train_dataset, eval_dataset=val_dataset,
+        trainer = Trainer(model=self.model,
+                          args=training_args,
+                          train_dataset=train_dataset,
+                          eval_dataset=val_dataset,
                           compute_metrics=self.compute_metrics)
         # 开始训练模型
         logger.info("开始训练BERT模型")
@@ -224,8 +231,8 @@ class QueryClassifier(object):
             return_tensors="pt"
         )
         dataset = self.build_dataset(encodings, labels)
-        print(f'len(dataset)-->{len(dataset)}')
-        print(f'dataset[0]--->{dataset[0]}')
+        # print(f'len(dataset)-->{len(dataset)}')
+        # print(f'dataset[0]--->{dataset[0]}')
         trainer = Trainer(model=self.model)
         predictions = trainer.predict(dataset)
         print(f'predictions--》{predictions}')
@@ -275,38 +282,38 @@ class QueryClassifier(object):
 
     def save_model(self):
         """保存模型"""
-        self.model.save_pretrained("/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/models/bert_query_classifier")
-        self.tokenizer.save_pretrained("/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/models/bert_query_classifier")
-        logger.info(f"模型保存至: ../models/bert_query_classifier")
+        self.model.save_pretrained(self.model_path)
+        self.tokenizer.save_pretrained(self.model_path)
+        logger.info(f"模型保存至: {self.model_path}")
 
 
 
 if __name__ == '__main__':
     query_classifier_model = QueryClassifier(model_path='models/bert_query_classifier')
     path = f'/Users/erainm/Documents/application/dev/workSpace/rag_system/integrated_qa_system/rag_qa/data/classify_data/model_generic_5000.json'
-    # with open(path, 'r', encoding='utf-8') as f:
-    #     lines = f.readlines()
-    #     query = []
-    #     labels = []
-    #     for line in lines:
-    #         data = json.loads(line)
-    #         query.append(data['query'])
-    #         labels.append(data['label'])
-    # print(len(query), len(labels))
-    #
-    # encodings, labels = query_classifier_model.preprocess_data(query, labels)
-    # print(encodings, labels)
-    # datasets = query_classifier_model.build_dataset(encodings, labels)
+    with open(path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        query = []
+        labels = []
+        for line in lines:
+            data = json.loads(line)
+            query.append(data['query'])
+            labels.append(data['label'])
+    print(len(query), len(labels))
+
+    encodings, labels = query_classifier_model.preprocess_data(query, labels)
+    print(encodings, labels)
+    datasets = query_classifier_model.build_dataset(encodings, labels)
     # 模型训练
-    # query_classifier_model.train_model(path)
+    query_classifier_model.train_model(path)
 
     # 模型预测
-    test_queries = [
-        "如何查询天气",
-        "AI学科的课程大纲是什么？",
-        "Java怎么学"
-     ]
-
-    for query in test_queries:
-        category = query_classifier_model.predict_category(query)
-        print(f"查询：{query}，类别：{category}")
+    # test_queries = [
+    #     "如何查询天气",
+    #     "AI学科的课程大纲是什么？",
+    #     "Java怎么学"
+    #  ]
+    #
+    # for query in test_queries:
+    #     category = query_classifier_model.predict_category(query)
+    #     print(f"查询：{query}，类别：{category}")
