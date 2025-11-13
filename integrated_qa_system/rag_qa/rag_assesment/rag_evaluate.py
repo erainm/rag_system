@@ -14,7 +14,7 @@ from ragas import evaluate
 from ragas.metrics import (
     Faithfulness,
     AnswerRelevancy,
-    ContextRelevance,
+    ContextPrecision,
     ContextRecall
 )
 # 导入datasets库的Dataset类，用于构建RAGAS所需的数据格式
@@ -81,7 +81,7 @@ result = evaluate(
     metrics=[
         Faithfulness(),  # 忠实度：答案是否基于上下文
         AnswerRelevancy(),  # 答案相关性：答案与问题的匹配度
-        ContextRelevance(),  # 上下文相关性：上下文是否仅包含相关信息
+        ContextPrecision(),  # 上下文相关性：上下文是否仅包含相关信息
         ContextRecall()  # 上下文召回率：上下文是否包含所有必要信息
     ],
     # 传入配置好的LLM模型
